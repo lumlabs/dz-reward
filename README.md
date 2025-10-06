@@ -35,7 +35,7 @@ The process consists of two scripts:
 ### 1. Clone or copy the scripts
 
 ```bash
-git clone git@github.com:lumlabs/dz-reward.git
+git clone https://github.com/lumlabs/dz-reward.git
 cd dz-reward
 ```
 
