@@ -1,0 +1,16 @@
+[Unit]
+Description=DZ-Reward Validator Debt Management
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/dz-reward
+EnvironmentFile=/opt/dz-reward/.env
+ExecStart=/opt/dz-reward/run.sh fund --auto
+StandardOutput=append:/var/log/dz-reward.log
+StandardError=append:/var/log/dz-reward.log
+
+[Install]
+WantedBy=multi-user.target
