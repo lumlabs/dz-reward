@@ -35,6 +35,7 @@ DZ_SLACK_WEBHOOK_URL = os.getenv("DZ_SLACK_WEBHOOK_URL")
 DZ_AUTO_FUND = os.getenv("DZ_AUTO_FUND", "false").lower() == "true"
 DZ_LOG_PATH = os.getenv("DZ_LOG_PATH", os.path.expanduser("~/.dz-reward/payment_history.json"))
 DZ_NETWORK = os.getenv("DZ_NETWORK", "mainnet-beta")
+DZ_SOLANA_CLI_PATH = os.getenv("DZ_SOLANA_CLI_PATH", "solana")
 
 # Retry configuration
 DZ_RETRY_ATTEMPTS = int(os.getenv("DZ_RETRY_ATTEMPTS", "3"))
@@ -87,11 +88,47 @@ def get_validator_address() -> str:
     return None
 
 
+def find_solana_cli() -> str | None:
+    """Find solana CLI in common locations."""
+    # First check if user specified a path
+    if DZ_SOLANA_CLI_PATH != "solana":
+        if os.path.isfile(DZ_SOLANA_CLI_PATH):
+            return DZ_SOLANA_CLI_PATH
+
+    # Common solana CLI locations
+    common_paths = [
+        "solana",  # In PATH
+        os.path.expanduser("~/.local/share/solana/install/active_release/bin/solana"),
+        "/root/.local/share/solana/install/active_release/bin/solana",
+        "/usr/local/bin/solana",
+        "/usr/bin/solana",
+        os.path.expanduser("~/solana/bin/solana"),
+    ]
+
+    for path in common_paths:
+        try:
+            result = subprocess.run(
+                [path, "--version"],
+                capture_output=True,
+                check=True
+            )
+            return path
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
+
+    return None
+
+
 def get_wallet_balance() -> float | None:
     """Get the current wallet balance in SOL."""
+    solana_cli = find_solana_cli()
+    if not solana_cli:
+        logger.warning("solana CLI not found. Set DZ_SOLANA_CLI_PATH or install Solana CLI tools.")
+        return None
+
     try:
         result = subprocess.run(
-            ["solana", "balance", "--output", "json"],
+            [solana_cli, "balance", "--output", "json"],
             capture_output=True,
             text=True,
             check=True
@@ -107,7 +144,7 @@ def get_wallet_balance() -> float | None:
         # Try parsing plain text output like "1.5 SOL"
         try:
             result = subprocess.run(
-                ["solana", "balance"],
+                [solana_cli, "balance"],
                 capture_output=True,
                 text=True,
                 check=True
@@ -117,8 +154,41 @@ def get_wallet_balance() -> float | None:
         except Exception:
             logger.error(f"Failed to parse wallet balance: {e}")
             return None
+
+
+def get_validator_pda(validator_address: str) -> str | None:
+    """Get the PDA (deposit) account address for a validator."""
+    try:
+        result = subprocess.run(
+            [
+                "doublezero-solana", "revenue-distribution", "fetch", "validator-deposits",
+                "-u", DZ_NETWORK,
+                "--node-id", validator_address
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        output = result.stdout.strip()
+        logger.debug(f"Validator deposits output:\n{output}")
+
+        # Parse the table to find PDA account
+        # Format: PDA Account | Node ID | Balance
+        for line in output.split("\n"):
+            if validator_address in line:
+                parts = line.split("|")
+                if len(parts) >= 1:
+                    pda = parts[0].strip()
+                    if pda and len(pda) > 30:  # Valid Solana address
+                        return pda
+
+        return None
+
+    except subprocess.CalledProcessError as e:
+        logger.debug(f"Failed to fetch validator deposits: {e}")
+        return None
     except FileNotFoundError:
-        logger.error("solana CLI not found. Please install Solana CLI tools.")
         return None
 
 
@@ -149,8 +219,12 @@ def get_validator_debt(validator_address: str) -> dict | None:
             "validator": validator_address,
             "raw_output": output,
             "debt_sol": 0.0,
-            "has_debt": False
+            "has_debt": False,
+            "pda_account": None
         }
+
+        # Get PDA account
+        debt_info["pda_account"] = get_validator_pda(validator_address)
 
         for line in output.split("\n"):
             if validator_address in line:
@@ -366,7 +440,6 @@ def cmd_check(args):
     cli_tools = [
         ("doublezero", "Required for getting validator address"),
         ("doublezero-solana", "Required for debt operations"),
-        ("solana", "Required for balance check"),
     ]
 
     for cli, description in cli_tools:
@@ -375,6 +448,14 @@ def cmd_check(args):
         else:
             print(f"  {cli}: NOT FOUND")
             errors.append(f"{cli} CLI not installed - {description}")
+
+    # Check solana CLI separately (can be in different location)
+    solana_path = find_solana_cli()
+    if solana_path:
+        print(f"  solana: OK ({solana_path})")
+    else:
+        print("  solana: NOT FOUND")
+        warnings.append("solana CLI not found - set DZ_SOLANA_CLI_PATH or install Solana CLI tools")
 
     # Check configuration
     print("\n[Configuration]")
@@ -490,6 +571,8 @@ def cmd_status(args):
         return 1
 
     print(f"\nValidator: {validator}")
+    if debt_info.get("pda_account"):
+        print(f"PDA Account: {debt_info['pda_account']}")
     print(f"Network: {DZ_NETWORK}")
     print(f"Outstanding Debt: {debt_info['debt_sol']:.9f} SOL")
     print(f"Has Debt: {'Yes' if debt_info['has_debt'] else 'No'}")
@@ -525,6 +608,8 @@ def cmd_fund(args):
         return 1
 
     print(f"\nValidator: {validator}")
+    if debt_info.get("pda_account"):
+        print(f"PDA Account: {debt_info['pda_account']}")
     print(f"Network: {DZ_NETWORK}")
     print(f"Outstanding Debt: {debt_info['debt_sol']:.9f} SOL")
 
@@ -704,6 +789,7 @@ Environment Variables:
   DZ_VALIDATOR_ADDRESS    Validator identity address
   DZ_KEYPAIR_PATH         Path to Solana keypair (default: /root/solana/mainnet-validator-keypair.json)
   DZ_NETWORK              Network to use (default: mainnet-beta)
+  DZ_SOLANA_CLI_PATH      Path to solana CLI (auto-detected if not set)
   DZ_TELEGRAM_BOT_TOKEN   Telegram bot token for notifications
   DZ_TELEGRAM_CHAT_ID     Telegram chat ID for notifications
   DZ_DISCORD_WEBHOOK_URL  Discord webhook URL for notifications

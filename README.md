@@ -54,6 +54,7 @@ Configure via environment variables or `.env` file:
 | `DZ_VALIDATOR_ADDRESS` | Validator identity address | Auto-detected from CLI |
 | `DZ_KEYPAIR_PATH` | Path to Solana keypair | `/root/solana/mainnet-validator-keypair.json` |
 | `DZ_NETWORK` | Network (mainnet-beta, testnet, devnet) | `mainnet-beta` |
+| `DZ_SOLANA_CLI_PATH` | Path to solana CLI | Auto-detected |
 | `DZ_TELEGRAM_BOT_TOKEN` | Telegram bot token | (optional) |
 | `DZ_TELEGRAM_CHAT_ID` | Telegram chat ID | (optional) |
 | `DZ_DISCORD_WEBHOOK_URL` | Discord webhook URL | (optional) |
