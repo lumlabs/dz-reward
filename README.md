@@ -11,8 +11,8 @@ A comprehensive tool for managing validator debt on the DoubleZero network. Auto
 - Payment history logging
 - Automatic retry on network failures
 - Configuration validation command
-- Cron-friendly auto mode
-- Systemd service support
+- Cron-friendly auto mode (required for automatic alerts)
+- Systemd service and timer support
 
 ## Requirements
 
@@ -43,6 +43,13 @@ chmod +x main.py run.sh
 4. Verify installation:
 ```bash
 ./run.sh check
+```
+
+5. **Set up automation** (required for automatic alerts):
+```bash
+crontab -e
+# Add this line to run daily at 9 AM:
+0 9 * * * cd /path/to/dz-reward && ./run.sh fund --auto >> /var/log/dz-reward.log 2>&1
 ```
 
 ## Configuration
@@ -118,9 +125,11 @@ The `run.sh` script handles virtual environment setup and dependency installatio
 ./run.sh --help
 ```
 
-## Automation
+## Automation (Required for Alerts)
 
-### Cron Setup
+> **Important:** The script does NOT run continuously. To receive automatic alerts when debt is detected, you MUST set up either Cron or Systemd timer. Without this, you'll need to run the script manually each time.
+
+### Cron Setup (Recommended)
 
 For automated debt funding, add to crontab:
 
@@ -174,13 +183,27 @@ sudo tail -f /var/log/dz-reward.log
 
 ### Telegram Setup
 
-1. Create a bot via [@BotFather](https://t.me/BotFather)
-2. Get your chat ID from [@userinfobot](https://t.me/userinfobot)
-3. Add to `.env`:
+1. Create a bot via [@BotFather](https://t.me/BotFather) - copy the bot token
+2. **Find your bot** in Telegram and send it any message (e.g., "hello")
+3. Get your chat ID by running:
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates"
+```
+4. In the response, find `"chat":{"id":123456789,...}` - that number is your chat ID
+5. Add to `.env`:
 ```
 DZ_TELEGRAM_BOT_TOKEN=your_bot_token
 DZ_TELEGRAM_CHAT_ID=your_chat_id
 ```
+
+**Troubleshooting Telegram:**
+
+If you get `403 Forbidden` error:
+- Make sure you sent a message to your bot first
+- Verify chat_id is YOUR id, not the bot's id (bot id is the first part of the token)
+- Run `getUpdates` again after sending a message to the bot
+
+Alternative way to get chat ID - use [@userinfobot](https://t.me/userinfobot) or [@getidsbot](https://t.me/getidsbot)
 
 ### Discord Setup
 
