@@ -1,3 +1,11 @@
+# Status
+
+This tool is deprecated and no longer relevant for current DoubleZero operations.
+
+It was created for automatic PDA account top-ups when protocol fee payments were required. After DoubleZero removed those fees, the tool no longer serves an active purpose.
+
+The repository remains available as a reference to the original implementation.
+
 # DZ-Reward: Validator Debt Management Tool
 
 A comprehensive tool for managing validator debt on the DoubleZero network. Automatically checks debt status, funds outstanding debt, and sends notifications via Telegram, Discord, and Slack.
